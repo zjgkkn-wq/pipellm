@@ -1,74 +1,47 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
+	"flag"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-type Config struct {
-	APIKey  string   `yaml:"api_key"`
-	Prompts []Prompt `yaml:"prompts"`
-}
-
-type Prompt struct {
-	Name   string `yaml:"name"`
-	Prompt string `yaml:"prompt"`
-}
-
-type ChatGPTRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-}
-
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type ChatGPTResponse struct {
-	Choices []Choice `json:"choices"`
-}
-
-type Choice struct {
-	Message Message `json:"message"`
-}
-
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--bash-alias" {
+	bashAlias := flag.Bool("bash-alias", false, "Generate bash aliases for all prompts")
+	flag.Parse()
+
+	if *bashAlias {
 		generateAliases()
 		return
 	}
 
 	var promptName string
-	if len(os.Args) > 1 {
+	if flag.NArg() > 0 {
 		// Called with alias name as argument
-		promptName = os.Args[1]
+		promptName = flag.Arg(0)
 	} else {
 		// Called directly by binary name
 		promptName = filepath.Base(os.Args[0])
 	}
 
-	config, err := loadConfig()
+	cfg, err := LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
 
-	prompt := findPrompt(config, promptName)
+	prompt := cfg.FindPrompt(promptName)
 	if prompt == "" {
 		fmt.Fprintf(os.Stderr, "No prompt found for name: %s\n", promptName)
 		os.Exit(1)
 	}
 
-	input := readStdin()
-	response, err := callChatGPT(config.APIKey, prompt, input)
+	userInput := ReadStdin()
+
+	client := NewClient(cfg.APIKey)
+	response, err := client.SendPrompt(prompt, userInput)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error calling ChatGPT: %v\n", err)
 		os.Exit(1)
@@ -77,172 +50,8 @@ func main() {
 	fmt.Println(response)
 }
 
-func loadConfig() (*Config, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-
-	configPath := filepath.Join(homeDir, ".pipellm.yaml")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("config file not found at %s", configPath)
-	}
-
-	var config Config
-	if err := parseYAML(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %v", err)
-	}
-
-	return &config, nil
-}
-
-func parseYAML(data []byte, v interface{}) error {
-	lines := strings.Split(string(data), "\n")
-	config := v.(*Config)
-	var currentPromptIndex = -1
-	var inFoldedScalar = false
-	var promptBuilder strings.Builder
-
-	for _, line := range lines {
-		originalLine := line
-		line = strings.TrimSpace(line)
-
-		if line == "" || strings.HasPrefix(line, "#") {
-			if inFoldedScalar {
-				// Empty line in folded scalar adds paragraph break
-				promptBuilder.WriteString("\n\n")
-			}
-			continue
-		}
-
-		if strings.HasPrefix(line, "api_key:") {
-			config.APIKey = strings.TrimSpace(strings.TrimPrefix(line, "api_key:"))
-		} else if strings.HasPrefix(line, "- name:") {
-			// Finish previous folded scalar if any
-			if inFoldedScalar && currentPromptIndex >= 0 {
-				config.Prompts[currentPromptIndex].Prompt = strings.TrimSpace(promptBuilder.String())
-				promptBuilder.Reset()
-				inFoldedScalar = false
-			}
-
-			name := strings.TrimSpace(strings.TrimPrefix(line, "- name:"))
-			prompt := Prompt{Name: name}
-			config.Prompts = append(config.Prompts, prompt)
-			currentPromptIndex = len(config.Prompts) - 1
-		} else if strings.HasPrefix(line, "prompt:") && strings.HasPrefix(originalLine, "  ") {
-			if currentPromptIndex >= 0 {
-				promptValue := strings.TrimSpace(strings.TrimPrefix(line, "prompt:"))
-				if promptValue == ">" {
-					// Start folded scalar
-					inFoldedScalar = true
-					promptBuilder.Reset()
-				} else if promptValue != "" {
-					// Single line prompt
-					config.Prompts[currentPromptIndex].Prompt = promptValue
-				}
-			}
-		} else if inFoldedScalar && strings.HasPrefix(originalLine, "    ") && currentPromptIndex >= 0 {
-			// Content of folded scalar (4+ spaces indented)
-			contentLine := strings.TrimLeft(originalLine, " ")
-			if promptBuilder.Len() > 0 && !strings.HasSuffix(promptBuilder.String(), "\n\n") {
-				promptBuilder.WriteString(" ")
-			}
-			promptBuilder.WriteString(contentLine)
-		} else if inFoldedScalar && !strings.HasPrefix(originalLine, "    ") && !strings.HasPrefix(originalLine, "- ") {
-			// End of folded scalar - next field or end
-			if currentPromptIndex >= 0 {
-				config.Prompts[currentPromptIndex].Prompt = strings.TrimSpace(promptBuilder.String())
-				promptBuilder.Reset()
-			}
-			inFoldedScalar = false
-		}
-	}
-
-	// Finish last folded scalar if any
-	if inFoldedScalar && currentPromptIndex >= 0 {
-		config.Prompts[currentPromptIndex].Prompt = strings.TrimSpace(promptBuilder.String())
-	}
-
-	return nil
-}
-
-func findPrompt(config *Config, binaryName string) string {
-	for _, p := range config.Prompts {
-		if strings.ToLower(strings.TrimSpace(p.Name)) == strings.ToLower(strings.TrimSpace(binaryName)) {
-			return p.Prompt
-		}
-	}
-	return ""
-}
-
-func readStdin() string {
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) != 0 {
-		// Terminal mode - no piped input
-		return ""
-	}
-
-	var input strings.Builder
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		input.WriteString(scanner.Text() + "\n")
-	}
-	return strings.TrimSpace(input.String())
-}
-
-func callChatGPT(apiKey, prompt, input string) (string, error) {
-	fullPrompt := prompt
-	if input != "" {
-		fullPrompt = prompt + "\n\n" + input
-	}
-
-	reqBody := ChatGPTRequest{
-		Model: "gpt-3.5-turbo",
-		Messages: []Message{
-			{Role: "user", Content: fullPrompt},
-		},
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", err
-	}
-
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var chatResp ChatGPTResponse
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", err
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no response from ChatGPT")
-	}
-
-	return chatResp.Choices[0].Message.Content, nil
-}
-
 func generateAliases() {
-	config, err := loadConfig()
+	cfg, err := LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
@@ -254,7 +63,7 @@ func generateAliases() {
 		os.Exit(1)
 	}
 
-	for _, prompt := range config.Prompts {
+	for _, prompt := range cfg.Prompts {
 		alias := strings.ToLower(prompt.Name)
 		fmt.Printf("alias %s='%s %s'\n", alias, execPath, alias)
 	}

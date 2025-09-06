@@ -1,1 +1,37 @@
+# Binaries
 pipellm
+pipellm.exe
+pipellm-*
+
+# Test coverage
+coverage.out
+coverage.html
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Bazel files (managed at workspace level, but good to have)
+bazel-*
+
+# Go module cache (if any)
+go.sum.bak
+
+# Log files
+*.log
+
+# Local config files (if any)
+.pipellm.yaml.local
+.env
+.env.local

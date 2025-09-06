@@ -5,10 +5,10 @@ and shell aliases.
 
 ## Installation
 
-1. Build the binary:
+### Go build
 ```bash
 go build -o pipellm
-````
+```
 
 2. Create a config file `~/.pipellm.yaml`:
 
@@ -17,10 +17,20 @@ api_key: your_openai_api_key_here
 
 prompts:
 - name: summary
-  prompt: Summarize this text and provide an overview:
+  prompt: >
+    Summarize the following text into a single short paragraph in
+    English. The summary should be clear, concise, and easy to read,
+    capturing the most important ideas.
+
+    Text:
 
 - name: kharms
-  prompt: Rewrite this text as if you were Daniil Kharms:
+  prompt: >
+    Rewrite the following text in the style of Daniil Kharms. The
+    result should be slightly surreal, whimsical, and playful, but
+    still preserve the original meaning and be understandable.
+
+    Text:
 ```
 
 3. Generate shell aliases and add them to `.bashrc`:
