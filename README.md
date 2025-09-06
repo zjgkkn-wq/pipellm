@@ -45,3 +45,15 @@ Or combine them:
 cat error.txt | grep ERROR | summary  | kharms 
 Everything has vanished like smoke, the file exists no more.
 ```
+
+Usage:
+
+```bash
+cat dsu.cc | review | summary | kharms
+Code comments every day
+Inspire me to action
+Fix mistakes,
+Refine the code,
+Clean up with labels and concepts.
+Keep it up, developer, in the same spirit!
+```
