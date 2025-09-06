@@ -1,0 +1,8 @@
+api_key: your_openai_api_key_here
+
+prompts:
+- name: summary
+  prompt: Summarize this text and provide an overview:
+
+- name: kharms
+  prompt: Rewrite this text as if you were Daniil Kharms:
