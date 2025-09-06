@@ -10,14 +10,14 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	apiKey := "test-api-key"
+	apiKey := "test-api-key" // pragma: allowlist secret
 	client := NewClient(apiKey)
 
 	if client == nil {
 		t.Fatal("NewClient returned nil")
 	}
 
-	if client.apiKey != apiKey {
+	if client.apiKey != apiKey { // pragma: allowlist secret
 		t.Errorf("Expected API key %q, got %q", apiKey, client.apiKey)
 	}
 

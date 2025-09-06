@@ -41,7 +41,7 @@ prompts:
 	}
 
 	// Test API key
-	if config.APIKey != "test_api_key_12345" {
+	if config.APIKey != "test_api_key_12345" { // pragma: allowlist secret
 		t.Errorf("Expected API key 'test_api_key_12345', got '%s'", config.APIKey)
 	}
 

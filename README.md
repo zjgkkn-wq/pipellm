@@ -6,11 +6,12 @@ and shell aliases.
 ## Installation
 
 ### Go build
+
 ```bash
 go build -o pipellm
 ```
 
-2. Create a config file `~/.pipellm.yaml`:
+### Create a config file `~/.pipellm.yaml`
 
 ```yaml
 api_key: your_openai_api_key_here
@@ -33,7 +34,7 @@ prompts:
     Text:
 ```
 
-3. Generate shell aliases and add them to `.bashrc`:
+### Generate shell aliases and add them to `.bashrc`
 
 ```bash
 ./pipellm --bash-alias >> ~/.bashrc
@@ -52,7 +53,7 @@ echo "Plain text" | kharms
 Or combine them:
 
 ```bash
-cat error.txt | grep ERROR | summary  | kharms 
+cat error.txt | grep ERROR | summary  | kharms
 Everything has vanished like smoke, the file exists no more.
 ```
 
