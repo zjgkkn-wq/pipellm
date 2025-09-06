@@ -100,26 +100,68 @@ func loadConfig() (*Config, error) {
 func parseYAML(data []byte, v interface{}) error {
 	lines := strings.Split(string(data), "\n")
 	config := v.(*Config)
+	var currentPromptIndex = -1
+	var inFoldedScalar = false
+	var promptBuilder strings.Builder
 
 	for _, line := range lines {
 		originalLine := line
 		line = strings.TrimSpace(line)
+
 		if line == "" || strings.HasPrefix(line, "#") {
+			if inFoldedScalar {
+				// Empty line in folded scalar adds paragraph break
+				promptBuilder.WriteString("\n\n")
+			}
 			continue
 		}
 
 		if strings.HasPrefix(line, "api_key:") {
 			config.APIKey = strings.TrimSpace(strings.TrimPrefix(line, "api_key:"))
 		} else if strings.HasPrefix(line, "- name:") {
+			// Finish previous folded scalar if any
+			if inFoldedScalar && currentPromptIndex >= 0 {
+				config.Prompts[currentPromptIndex].Prompt = strings.TrimSpace(promptBuilder.String())
+				promptBuilder.Reset()
+				inFoldedScalar = false
+			}
+
 			name := strings.TrimSpace(strings.TrimPrefix(line, "- name:"))
 			prompt := Prompt{Name: name}
 			config.Prompts = append(config.Prompts, prompt)
+			currentPromptIndex = len(config.Prompts) - 1
 		} else if strings.HasPrefix(line, "prompt:") && strings.HasPrefix(originalLine, "  ") {
-			if len(config.Prompts) > 0 {
-				promptText := strings.TrimSpace(strings.TrimPrefix(line, "prompt:"))
-				config.Prompts[len(config.Prompts)-1].Prompt = promptText
+			if currentPromptIndex >= 0 {
+				promptValue := strings.TrimSpace(strings.TrimPrefix(line, "prompt:"))
+				if promptValue == ">" {
+					// Start folded scalar
+					inFoldedScalar = true
+					promptBuilder.Reset()
+				} else if promptValue != "" {
+					// Single line prompt
+					config.Prompts[currentPromptIndex].Prompt = promptValue
+				}
 			}
+		} else if inFoldedScalar && strings.HasPrefix(originalLine, "    ") && currentPromptIndex >= 0 {
+			// Content of folded scalar (4+ spaces indented)
+			contentLine := strings.TrimLeft(originalLine, " ")
+			if promptBuilder.Len() > 0 && !strings.HasSuffix(promptBuilder.String(), "\n\n") {
+				promptBuilder.WriteString(" ")
+			}
+			promptBuilder.WriteString(contentLine)
+		} else if inFoldedScalar && !strings.HasPrefix(originalLine, "    ") && !strings.HasPrefix(originalLine, "- ") {
+			// End of folded scalar - next field or end
+			if currentPromptIndex >= 0 {
+				config.Prompts[currentPromptIndex].Prompt = strings.TrimSpace(promptBuilder.String())
+				promptBuilder.Reset()
+			}
+			inFoldedScalar = false
 		}
+	}
+
+	// Finish last folded scalar if any
+	if inFoldedScalar && currentPromptIndex >= 0 {
+		config.Prompts[currentPromptIndex].Prompt = strings.TrimSpace(promptBuilder.String())
 	}
 
 	return nil
