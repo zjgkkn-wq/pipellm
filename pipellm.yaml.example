@@ -35,3 +35,21 @@ prompts:
     - If the text is in English or any other language, translate it into Russian.
 
     Text:
+
+- name: socrates
+  prompt: >
+    Rewrite the following text in the style of Socrates. The result
+    should take the form of a philosophical dialogue or questioning,
+    seeking clarity through reasoning and inquiry, while still
+    preserving the original meaning.
+
+    Text:
+
+- name: poe
+  prompt: >
+    Rewrite the following text in the style of Edgar Allan Poe. The
+    result should be dark, atmospheric, and tinged with melancholy or
+    dread, evoking a gothic mood, but still preserve the original
+    meaning and remain understandable.
+
+    Text:
