@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	APIKey  string   `yaml:"api_key"`
+	Model   string   `yaml:"model"`
 	Prompts []Prompt `yaml:"prompts"`
 }
 

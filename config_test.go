@@ -13,6 +13,7 @@ func TestLoadConfig(t *testing.T) {
 	configPath := filepath.Join(tempDir, ".pipellm.yaml")
 
 	configContent := `api_key: test_api_key_12345
+model: gemini-pro
 prompts:
 - name: test1
   prompt: This is test prompt 1
@@ -43,6 +44,11 @@ prompts:
 	// Test API key
 	if config.APIKey != "test_api_key_12345" { // pragma: allowlist secret
 		t.Errorf("Expected API key 'test_api_key_12345', got '%s'", config.APIKey)
+	}
+
+	// Test model
+	if config.Model != "gemini-pro" {
+		t.Errorf("Expected model 'gemini-pro', got '%s'", config.Model)
 	}
 
 	// Test prompts count
@@ -118,9 +124,43 @@ prompts:
 	}
 }
 
+func TestLoadConfigWithoutModel(t *testing.T) {
+	// Test config without model field (backwards compatibility)
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".pipellm.yaml")
+
+	configContent := `api_key: test_api_key_old
+prompts:
+- name: test
+  prompt: Test prompt
+`
+
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config file: %v", err)
+	}
+
+	// Temporarily change HOME directory
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tempDir)
+
+	// Test LoadConfig
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	// Model should be empty string when not specified
+	if config.Model != "" {
+		t.Errorf("Expected empty model when not specified, got '%s'", config.Model)
+	}
+}
+
 func TestConfigFindPrompt(t *testing.T) {
 	config := &Config{
 		APIKey: "test_key",
+		Model:  "gemini-pro",
 		Prompts: []Prompt{
 			{Name: "test1", Prompt: "First test prompt"},
 			{Name: "Test2", Prompt: "Second test prompt"},

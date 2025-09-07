@@ -1,109 +1,94 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
 )
 
 func TestNewClient(t *testing.T) {
-	apiKey := "test-api-key" // pragma: allowlist secret
-	client := NewClient(apiKey)
-
-	if client == nil {
-		t.Fatal("NewClient returned nil")
-	}
-
-	if client.apiKey != apiKey { // pragma: allowlist secret
-		t.Errorf("Expected API key %q, got %q", apiKey, client.apiKey)
-	}
-
-	if client.httpClient == nil {
-		t.Error("HTTP client should not be nil")
+	// This test now checks if the client is created without errors.
+	// A valid API key is not needed for the basic client creation itself,
+	// but requests will fail. We test requests separately.
+	_, err := NewClient("test-api-key", "gemini-pro") // pragma: allowlist secret
+	if err != nil {
+		t.Fatalf("NewClient() error = %v, wantErr nil", err)
 	}
 }
 
+// Helper struct for a more robust check of the request body
+type GeminiRequest struct {
+	Contents []struct {
+		Parts []struct {
+			Text string `json:"text"`
+		} `json:"parts"`
+	} `json:"contents"`
+}
+
 func TestClientSendPrompt(t *testing.T) {
-	// Mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request method
 		if r.Method != "POST" {
 			t.Errorf("Expected POST request, got %s", r.Method)
 		}
 
-		// Verify headers
-		contentType := r.Header.Get("Content-Type")
-		if contentType != "application/json" {
-			t.Errorf("Expected Content-Type 'application/json', got %q", contentType)
+		if !strings.Contains(r.URL.Path, "gemini-pro:generateContent") {
+			t.Errorf("Expected path to contain 'gemini-pro:generateContent', got %s", r.URL.Path)
 		}
 
-		auth := r.Header.Get("Authorization")
-		expectedAuth := "Bearer test-api-key"
-		if auth != expectedAuth {
-			t.Errorf("Expected Authorization %q, got %q", expectedAuth, auth)
-		}
-
-		// Read and verify request body
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Fatalf("Failed to read request body: %v", err)
 		}
 
-		var req Request
+		var req GeminiRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			t.Fatalf("Failed to parse request JSON: %v", err)
+			t.Fatalf("Failed to unmarshal request body: %v", err)
 		}
 
-		if req.Model != "gpt-3.5-turbo" {
-			t.Errorf("Expected model 'gpt-3.5-turbo', got %q", req.Model)
-		}
-
-		if len(req.Messages) != 1 {
-			t.Errorf("Expected 1 message, got %d", len(req.Messages))
-		}
-
-		if req.Messages[0].Role != "user" {
-			t.Errorf("Expected role 'user', got %q", req.Messages[0].Role)
+		if len(req.Contents) != 1 || len(req.Contents[0].Parts) != 1 {
+			t.Fatalf("Expected 1 content with 1 part, got %+v", req)
 		}
 
 		expectedContent := "Test prompt\n\nTest input"
-		if req.Messages[0].Content != expectedContent {
-			t.Errorf("Expected content %q, got %q", expectedContent, req.Messages[0].Content)
+		if req.Contents[0].Parts[0].Text != expectedContent {
+			t.Errorf("Expected content %q, got %q", expectedContent, req.Contents[0].Parts[0].Text)
 		}
 
-		// Send mock response
-		mockResponse := Response{
-			Choices: []Choice{
-				{
-					Message: Message{
-						Role:    "assistant",
-						Content: "Test response from AI",
-					},
-				},
-			},
-		}
-
+		mockResponse := `{
+			"candidates": [{
+				"content": {
+					"parts": [{"text": "Test response from AI"}],
+					"role": "model"
+				}
+			}]
+		}`
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
+		w.Write([]byte(mockResponse))
 	}))
 	defer server.Close()
 
-	// Create client and replace URL for testing
-	client := NewClient("test-api-key")
-
-	// We need to modify the client to use our test server
-	// For this, we'll temporarily modify the SendPrompt method's URL
-	originalTransport := client.httpClient.Transport
-	client.httpClient.Transport = &mockTransport{
-		server: server,
-		orig:   originalTransport,
+	ctx := context.Background()
+	// Use WithEndpoint to redirect requests to our test server.
+	client, err := genai.NewClient(ctx,
+		option.WithAPIKey("test-api-key"),
+		option.WithEndpoint(server.URL),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create test genai client: %v", err)
 	}
+	defer client.Close()
 
-	// Test SendPrompt
-	response, err := client.SendPrompt("Test prompt", "Test input")
+	model := client.GenerativeModel("gemini-pro")
+	pipellmClient := &Client{model: model}
+
+	response, err := pipellmClient.SendPrompt("Test prompt", "Test input")
 	if err != nil {
 		t.Fatalf("SendPrompt failed: %v", err)
 	}
@@ -115,50 +100,50 @@ func TestClientSendPrompt(t *testing.T) {
 }
 
 func TestClientSendPromptNoInput(t *testing.T) {
-	// Mock server for testing prompt without input
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Read and verify request body
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Fatalf("Failed to read request body: %v", err)
 		}
 
-		var req Request
+		var req GeminiRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			t.Fatalf("Failed to parse request JSON: %v", err)
+			t.Fatalf("Failed to unmarshal request body: %v", err)
 		}
 
-		// When no input is provided, content should be just the prompt
+		if len(req.Contents) != 1 || len(req.Contents[0].Parts) != 1 {
+			t.Fatalf("Expected 1 content with 1 part, got %+v", req)
+		}
+
 		expectedContent := "Test prompt only"
-		if req.Messages[0].Content != expectedContent {
-			t.Errorf("Expected content %q, got %q", expectedContent, req.Messages[0].Content)
+		if req.Contents[0].Parts[0].Text != expectedContent {
+			t.Errorf("Expected content %q, got %q", expectedContent, req.Contents[0].Parts[0].Text)
 		}
 
-		// Send mock response
-		mockResponse := Response{
-			Choices: []Choice{
-				{
-					Message: Message{
-						Role:    "assistant",
-						Content: "Response to prompt only",
-					},
-				},
-			},
-		}
-
+		mockResponse := `{
+			"candidates": [{
+				"content": {
+					"parts": [{"text": "Response to prompt only"}],
+					"role": "model"
+				}
+			}]
+		}`
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
+		w.Write([]byte(mockResponse))
 	}))
 	defer server.Close()
 
-	client := NewClient("test-api-key")
-	client.httpClient.Transport = &mockTransport{
-		server: server,
-		orig:   client.httpClient.Transport,
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey("test-api-key"), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("Failed to create test genai client: %v", err)
 	}
+	defer client.Close()
 
-	// Test SendPrompt with empty input
-	response, err := client.SendPrompt("Test prompt only", "")
+	model := client.GenerativeModel("gemini-pro")
+	pipellmClient := &Client{model: model}
+
+	response, err := pipellmClient.SendPrompt("Test prompt only", "")
 	if err != nil {
 		t.Fatalf("SendPrompt failed: %v", err)
 	}
@@ -170,68 +155,52 @@ func TestClientSendPromptNoInput(t *testing.T) {
 }
 
 func TestClientSendPromptNoChoices(t *testing.T) {
-	// Mock server that returns empty choices
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mockResponse := Response{
-			Choices: []Choice{}, // Empty choices
-		}
-
+		mockResponse := `{"candidates": []}` // Empty candidates
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
+		w.Write([]byte(mockResponse))
 	}))
 	defer server.Close()
 
-	client := NewClient("test-api-key")
-	client.httpClient.Transport = &mockTransport{
-		server: server,
-		orig:   client.httpClient.Transport,
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey("test-api-key"), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("Failed to create test genai client: %v", err)
 	}
+	defer client.Close()
 
-	// Test SendPrompt with no choices in response
-	_, err := client.SendPrompt("Test prompt", "Test input")
+	model := client.GenerativeModel("gemini-pro")
+	pipellmClient := &Client{model: model}
+
+	_, err = pipellmClient.SendPrompt("Test prompt", "Test input")
 	if err == nil {
 		t.Fatal("Expected error when no choices in response, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "no response from ChatGPT") {
-		t.Errorf("Expected 'no response from ChatGPT' error, got %v", err)
+	if !strings.Contains(err.Error(), "no response from Gemini") {
+		t.Errorf("Expected 'no response from Gemini' error, got %v", err)
 	}
 }
 
 func TestClientSendPromptInvalidJSON(t *testing.T) {
-	// Mock server that returns invalid JSON
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("invalid json response"))
 	}))
 	defer server.Close()
 
-	client := NewClient("test-api-key")
-	client.httpClient.Transport = &mockTransport{
-		server: server,
-		orig:   client.httpClient.Transport,
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey("test-api-key"), option.WithEndpoint(server.URL))
+	if err != nil {
+		t.Fatalf("Failed to create test genai client: %v", err)
 	}
+	defer client.Close()
 
-	// Test SendPrompt with invalid JSON response
-	_, err := client.SendPrompt("Test prompt", "Test input")
+	model := client.GenerativeModel("gemini-pro")
+	pipellmClient := &Client{model: model}
+
+	_, err = pipellmClient.SendPrompt("Test prompt", "Test input")
 	if err == nil {
 		t.Fatal("Expected error when response is invalid JSON, got nil")
 	}
-}
-
-// mockTransport redirects requests to our test server
-type mockTransport struct {
-	server *httptest.Server
-	orig   http.RoundTripper
-}
-
-func (t *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Replace the URL to point to our test server
-	req.URL.Scheme = "http"
-	req.URL.Host = strings.TrimPrefix(t.server.URL, "http://")
-
-	if t.orig != nil {
-		return t.orig.RoundTrip(req)
-	}
-	return http.DefaultTransport.RoundTrip(req)
 }

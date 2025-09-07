@@ -1,41 +1,28 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
+
+	"github.com/google/generative-ai-go/genai"
+	"google.golang.org/api/option"
 )
 
-type Request struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-}
-
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type Response struct {
-	Choices []Choice `json:"choices"`
-}
-
-type Choice struct {
-	Message Message `json:"message"`
-}
-
 type Client struct {
-	apiKey     string
-	httpClient *http.Client
+	model *genai.GenerativeModel
 }
 
-func NewClient(apiKey string) *Client {
-	return &Client{
-		apiKey:     apiKey,
-		httpClient: &http.Client{},
+func NewClient(apiKey, modelName string) (*Client, error) {
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
 	}
+
+	model := client.GenerativeModel(modelName)
+	return &Client{
+		model: model,
+	}, nil
 }
 
 func (c *Client) SendPrompt(prompt, input string) (string, error) {
@@ -44,45 +31,22 @@ func (c *Client) SendPrompt(prompt, input string) (string, error) {
 		fullPrompt = prompt + "\n\n" + input
 	}
 
-	reqBody := Request{
-		Model: "gpt-3.5-turbo",
-		Messages: []Message{
-			{Role: "user", Content: fullPrompt},
-		},
-	}
-
-	jsonData, err := json.Marshal(reqBody)
+	ctx := context.Background()
+	resp, err := c.model.GenerateContent(ctx, genai.Text(fullPrompt))
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", err
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no response from Gemini")
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	var result string
+	for _, part := range resp.Candidates[0].Content.Parts {
+		if txt, ok := part.(genai.Text); ok {
+			result += string(txt)
+		}
 	}
 
-	var chatResp Response
-	if err := json.Unmarshal(body, &chatResp); err != nil {
-		return "", err
-	}
-
-	if len(chatResp.Choices) == 0 {
-		return "", fmt.Errorf("no response from ChatGPT")
-	}
-
-	return chatResp.Choices[0].Message.Content, nil
+	return result, nil
 }

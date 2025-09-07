@@ -40,10 +40,19 @@ func main() {
 
 	userInput := ReadStdin()
 
-	client := NewClient(cfg.APIKey)
+	modelName := cfg.Model
+	if modelName == "" {
+		modelName = "gemini-pro" // default model
+	}
+
+	client, err := NewClient(cfg.APIKey, modelName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating client: %v\n", err)
+		os.Exit(1)
+	}
 	response, err := client.SendPrompt(prompt, userInput)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error calling ChatGPT: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error calling Gemini API: %v\n", err)
 		os.Exit(1)
 	}
 

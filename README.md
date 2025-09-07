@@ -1,6 +1,6 @@
 # PipeLLM
 
-A simple CLI tool for working with the ChatGPT API using named prompts
+A simple CLI tool for working with the Gemini API using named prompts
 and shell aliases.
 
 ## Installation
@@ -14,7 +14,7 @@ go build -o pipellm
 ### Create a config file `~/.pipellm.yaml`
 
 ```yaml
-api_key: your_openai_api_key_here
+api_key: your_gemini_api_key_here
 
 prompts:
 - name: summary
