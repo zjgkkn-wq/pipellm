@@ -71,7 +71,19 @@ Keep it up, developer, in the same spirit!
 
 ```bash
 kubectl get po -A | summary | kharms
-The little pods, they hummed and whirred. Most of them, you see, were quite content. They resided in grand houses named `authentik`, `cert-manager`, `kube-system`, and `zuul`. They performed their duties with a cheerful, if often inexplicable, vigor.
+The little pods, they hummed and whirred. Most of them,
+you see, were quite content. They resided in grand houses
+named `authentik`, `cert-manager`, `kube-system`, and
+`zuul`. They performed their duties with a cheerful,
+if often inexplicable, vigor.
 
-However, some pods were less enthusiastic about the whole business. The `vault-server-0` pod, for instance, seemed to be contemplating its very existence, not quite ready to engage with the day's proceedings. And a few of the `ingress-nginx` admission pods, after a brief flurry of activity, had decided their tasks were, for the moment, entirely complete. They had finished. They had done. Now, what? The others, of course, continued their busy, humming existence, none the wiser.
+However, some pods were less enthusiastic about the whole
+business. The `vault-server-0` pod, for instance, seemed
+to be contemplating its very existence, not quite ready
+to engage with the day's proceedings. And a few of the
+`ingress-nginx` admission pods, after a brief flurry of
+activity, had decided their tasks were, for the moment,
+entirely complete. They had finished. They had done. Now,
+what? The others, of course, continued their busy, humming
+existence, none the wiser.
 ```
