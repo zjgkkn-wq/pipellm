@@ -1,17 +1,17 @@
 # PipeLLM
 
-A simple CLI tool for working with the Gemini API using named prompts
-and shell aliases.
+✨ A simple and lightweight CLI tool for working with the **Gemini
+API** using named prompts and shell aliases.
 
-## Installation
+## 🚀 Installation
 
-### Go build
+### 1. Build with Go
 
 ```bash
 go build -o pipellm
 ```
 
-### Create a config file `~/.pipellm.yaml`
+### 2. Create a config file `~/.pipellm.yaml`
 
 ```yaml
 api_key: your_gemini_api_key_here
@@ -34,14 +34,18 @@ prompts:
     Text:
 ```
 
-### Generate shell aliases and add them to `.bashrc`
+### 3. Generate shell aliases
+
+Add them to `.bashrc` (or `.zshrc`):
 
 ```bash
 ./pipellm --bash-alias >> ~/.bashrc
 source ~/.bashrc
 ```
 
-## Usage
+---
+
+## 💡 Usage
 
 Run prompts directly in pipelines:
 
@@ -53,19 +57,19 @@ echo "Plain text" | kharms
 Or combine them:
 
 ```bash
-cat error.txt | grep ERROR | summary  | kharms
-Everything has vanished like smoke, the file exists no more.
+cat error.txt | grep ERROR | summary | kharms
+# → Everything has vanished like smoke, the file exists no more.
 ```
 
-Usage:
+You can also chain prompts creatively:
 
 ```bash
 cat dsu.cc | review | summary | kharms
-Code comments every day
-Inspire me to action
-Fix mistakes,
-Refine the code,
-Clean up with labels and concepts.
-Keep it up, developer, in the same spirit!
 ```
 
+---
+
+## 📬 Contact
+
+Questions, feedback, or ideas?  
+Feel free to reach out at: **zjgkkn@gmail.com**
